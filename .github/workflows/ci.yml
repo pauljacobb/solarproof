@@ -51,6 +51,15 @@ jobs:
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
       - run: pnpm test
         working-directory: apps/web
+      - name: Run tests with coverage
+        run: pnpm vitest run --coverage
+        working-directory: apps/web
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: apps/web/coverage/lcov.info
+          flags: web
+          fail_ci_if_error: false
       - run: pnpm build
         working-directory: apps/web
         env:

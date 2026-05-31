@@ -7,7 +7,24 @@ vi.mock('@/lib/auth', () => ({
 }))
 
 import { createServiceClient } from '@/lib/supabase'
-import { POST } from '@/app/api/meters/route'
+import { GET, POST } from '@/app/api/meters/route'
+
+function makeGetRequest() {
+  return {
+    headers: { get: (_: string) => null },
+    nextUrl: { searchParams: new URLSearchParams() },
+  } as unknown as Parameters<typeof GET>[0]
+}
+
+function mockDbGet(data: unknown[], error: unknown = null) {
+  vi.mocked(createServiceClient).mockReturnValue({
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        order: vi.fn().mockResolvedValue({ data, error }),
+      }),
+    }),
+  } as ReturnType<typeof createServiceClient>)
+}
 
 function makeRequest(body: unknown) {
   return {
@@ -67,5 +84,23 @@ describe('POST /api/meters', () => {
     mockDb()
     const res = await POST(makeRequest({ ...VALID_BODY, pubkey_hex: 'short' }))
     expect(res.status).toBe(400)
+  })
+})
+
+describe('GET /api/meters', () => {
+  it('returns 200 with meters list', async () => {
+    mockDbGet([{ id: 'meter-1', serial_number: 'SN-001' }])
+    const res = await GET(makeGetRequest())
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(Array.isArray(body)).toBe(true)
+  })
+
+  it('returns 500 when DB errors', async () => {
+    mockDbGet([], { message: 'db failure' })
+    const res = await GET(makeGetRequest())
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).toBe('db failure')
   })
 })
