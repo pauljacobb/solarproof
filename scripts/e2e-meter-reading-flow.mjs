@@ -112,7 +112,7 @@ async function main() {
   const recipientKeypair = Keypair.random()
   const meterId = randomUUID()
   const cooperativeId = randomUUID()
-  const kwh = 5.0
+  const kwh = 6.0
   const timestamp = Math.floor(Date.now() / 1000)
 
   const meterPubkeyHex = Buffer.from(meterKeypair.rawPublicKey()).toString('hex')

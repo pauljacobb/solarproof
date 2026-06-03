@@ -127,12 +127,16 @@ function groupByPeriod(readings: Reading[], period: Period): { date: string; kwh
     .map(([date, kwh]) => ({ date, kwh: Math.round(kwh * 100) / 100 }))
 }
 
-function groupByMeter(readings: Reading[]): { meter: string; verified: number; unverified: number }[] {
+function groupByMeter(
+  readings: Reading[],
+  meters: Record<string, string>
+): { meter: string; verified: number; unverified: number }[] {
   const map: Record<string, { verified: number; unverified: number }> = {}
   for (const r of readings) {
-    if (!map[r.meter_id]) map[r.meter_id] = { verified: 0, unverified: 0 }
-    if (r.verified) map[r.meter_id].verified += r.kwh
-    else map[r.meter_id].unverified += r.kwh
+    const label = meters[r.meter_id] || r.meter_id.slice(0, 8)
+    if (!map[label]) map[label] = { verified: 0, unverified: 0 }
+    if (r.verified) map[label].verified += r.kwh
+    else map[label].unverified += r.kwh
   }
   return Object.entries(map).map(([meter, counts]) => ({
     meter,
@@ -180,9 +184,23 @@ export default function DashboardPage() {
     refetchInterval: isConnected ? false : 30000,
   })
 
+  const { data: metersData } = useQuery({
+    queryKey: ['meters'],
+    queryFn: async () => {
+      const res = await fetch('/api/meters')
+      if (!res.ok) return []
+      return res.json()
+    },
+  })
+
+  const meterMap = (metersData || []).reduce((acc: Record<string, string>, m: any) => {
+    acc[m.id] = m.name || m.serial_number
+    return acc
+  }, {})
+
   const colors = useChartColors()
   const chartData = readings ? groupByPeriod(readings, period) : []
-  const meterData = readings ? groupByMeter(readings) : []
+  const meterData = readings ? groupByMeter(readings, meterMap) : []
 
   return (
     <WalletGate>
@@ -227,7 +245,6 @@ export default function DashboardPage() {
           ) : null}
         </div>
       </section>
-      </SectionErrorBoundary>
 
       {/* Charts */}
       <section aria-labelledby="charts-heading" className="mb-8">
@@ -342,7 +359,6 @@ export default function DashboardPage() {
           )}
         </div>
       </section>
-      </SectionErrorBoundary>
 
       {/* Recent readings table */}
       <section aria-labelledby="readings-heading">
@@ -361,7 +377,7 @@ export default function DashboardPage() {
             >
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800/50">
-                  {['Meter ID', 'kWh', 'Timestamp', 'Status'].map((h) => (
+                  {['Meter', 'kWh', 'Timestamp', 'Status'].map((h) => (
                     <th key={h} scope="col" className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
                       {h}
                     </th>
@@ -379,7 +395,7 @@ export default function DashboardPage() {
                       style={{ animationDelay: `${index * 50}ms` }}
                     >
                       <td className="px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300">{r.meter_id}</td>
-                      <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{r.kwh}</td>
+                      <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{r.kwh.toFixed(3)}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-400">{new Date(r.timestamp).toLocaleString()}</td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${r.verified ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'}`}>
@@ -398,7 +414,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </section>
-      </SectionErrorBoundary>
     </div>
     </WalletGate>
   )

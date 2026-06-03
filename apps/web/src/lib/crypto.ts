@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import { verifyAsync } from '@noble/ed25519'
 
 /**
  * Compute the canonical reading hash: `SHA-256(meter_id ‖ kwh_stroops_le ‖ timestamp_le)`
@@ -41,4 +42,24 @@ export function computeReadingHash(
   // The order is fixed by the protocol — changing it would invalidate all
   // existing meter signatures.
   return createHash('sha256').update(meterBytes).update(kwhBuf).update(tsBuf).digest()
+}
+
+/**
+ * Verify an Ed25519 signature over a canonical reading hash.
+ *
+ * @param signatureHex - 128-char hex-encoded Ed25519 signature (64 bytes).
+ * @param readingHash  - 32-byte SHA-256 digest from `computeReadingHash`.
+ * @param pubkeyHex    - 64-char hex-encoded Ed25519 public key (32 bytes).
+ * @returns `true` if the signature is valid, `false` otherwise (never throws).
+ */
+export async function verifyReadingSignature(
+  signatureHex: string,
+  readingHash: Buffer,
+  pubkeyHex: string
+): Promise<boolean> {
+  return verifyAsync(
+    Buffer.from(signatureHex, 'hex'),
+    readingHash,
+    Buffer.from(pubkeyHex, 'hex')
+  ).catch(() => false)
 }

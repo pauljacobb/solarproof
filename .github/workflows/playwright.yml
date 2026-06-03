@@ -1,0 +1,46 @@
+name: E2E — Playwright Dashboard
+
+on:
+  push:
+    branches: [main, develop, 'fix/**', 'feat/**']
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  playwright:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    environment: staging
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Run Playwright tests
+        run: pnpm --filter web exec playwright test
+        env:
+          CI: true
+          BASE_URL: ${{ vars.STAGING_URL || 'http://127.0.0.1:3000' }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          NEXT_PUBLIC_ENERGY_TOKEN_ID: ${{ secrets.NEXT_PUBLIC_ENERGY_TOKEN_ID }}
+          NEXT_PUBLIC_AUDIT_REGISTRY_ID: ${{ secrets.NEXT_PUBLIC_AUDIT_REGISTRY_ID }}
+
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-screenshots
+          path: apps/web/test-results/
+          retention-days: 7

@@ -1,20 +1,12 @@
 /**
- * Unit tests for Ed25519 signature verification utility
- * Issue #112 — security-critical path
- *
- * Uses @noble/ed25519 to generate real keypairs and signatures so every
- * acceptance criterion is exercised against the actual verify() call used
- * in POST /api/readings.
+ * Unit tests for Ed25519 signature verification utility (crypto.ts)
+ * Issue #112 — 100% coverage of the verification module
  */
 
 import { describe, it, expect } from 'vitest'
 import * as ed from '@noble/ed25519'
-import { computeReadingHash } from '@/lib/crypto'
+import { computeReadingHash, verifyReadingSignature } from '@/lib/crypto'
 import { kwhToStroops } from '@solarproof/stellar'
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 async function makeKeypair() {
   const privKey = ed.utils.randomPrivateKey()
@@ -27,15 +19,11 @@ async function signReading(
   meterId: string,
   kwh: number,
   timestamp: number
-): Promise<{ sig: Uint8Array; hash: Buffer }> {
+): Promise<{ sigHex: string; hash: Buffer }> {
   const hash = computeReadingHash(meterId, kwhToStroops(kwh), BigInt(timestamp))
   const sig = await ed.signAsync(hash, privKey)
-  return { sig, hash }
+  return { sigHex: Buffer.from(sig).toString('hex'), hash }
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
 
 describe('Ed25519 signature verification', () => {
   const METER_ID = 'meter-abc-123'
@@ -44,48 +32,50 @@ describe('Ed25519 signature verification', () => {
 
   it('valid signature returns true', async () => {
     const { privKey, pubKey } = await makeKeypair()
-    const { sig, hash } = await signReading(privKey, METER_ID, KWH, TIMESTAMP)
-    const result = await ed.verifyAsync(sig, hash, pubKey)
+    const { sigHex, hash } = await signReading(privKey, METER_ID, KWH, TIMESTAMP)
+    const result = await verifyReadingSignature(sigHex, hash, Buffer.from(pubKey).toString('hex'))
     expect(result).toBe(true)
   })
 
   it('invalid signature (random bytes) returns false', async () => {
     const { pubKey } = await makeKeypair()
     const hash = computeReadingHash(METER_ID, kwhToStroops(KWH), BigInt(TIMESTAMP))
-    const badSig = new Uint8Array(64).fill(0xab)
-    const result = await ed.verifyAsync(badSig, hash, pubKey)
+    const badSigHex = Buffer.alloc(64, 0xab).toString('hex')
+    const result = await verifyReadingSignature(badSigHex, hash, Buffer.from(pubKey).toString('hex'))
     expect(result).toBe(false)
   })
 
   it('tampered payload returns false', async () => {
     const { privKey, pubKey } = await makeKeypair()
-    const { sig } = await signReading(privKey, METER_ID, KWH, TIMESTAMP)
-    // Sign over original hash but verify against a different payload
+    const { sigHex } = await signReading(privKey, METER_ID, KWH, TIMESTAMP)
     const tamperedHash = computeReadingHash(METER_ID, kwhToStroops(KWH + 1), BigInt(TIMESTAMP))
-    const result = await ed.verifyAsync(sig, tamperedHash, pubKey)
+    const result = await verifyReadingSignature(sigHex, tamperedHash, Buffer.from(pubKey).toString('hex'))
     expect(result).toBe(false)
   })
 
   it('wrong public key returns false', async () => {
     const signer = await makeKeypair()
     const other = await makeKeypair()
-    const { sig, hash } = await signReading(signer.privKey, METER_ID, KWH, TIMESTAMP)
-    const result = await ed.verifyAsync(sig, hash, other.pubKey)
+    const { sigHex, hash } = await signReading(signer.privKey, METER_ID, KWH, TIMESTAMP)
+    const result = await verifyReadingSignature(sigHex, hash, Buffer.from(other.pubKey).toString('hex'))
     expect(result).toBe(false)
   })
 
-  it('malformed signature (wrong length) throws or returns false', async () => {
+  it('malformed signature (wrong length) returns false gracefully', async () => {
     const { pubKey } = await makeKeypair()
     const hash = computeReadingHash(METER_ID, kwhToStroops(KWH), BigInt(TIMESTAMP))
-    const shortSig = new Uint8Array(32) // too short
-    await expect(ed.verifyAsync(shortSig, hash, pubKey)).rejects.toThrow()
+    // 32 bytes (too short) — verifyReadingSignature catches and returns false
+    const shortSigHex = Buffer.alloc(32).toString('hex')
+    const result = await verifyReadingSignature(shortSigHex, hash, Buffer.from(pubKey).toString('hex'))
+    expect(result).toBe(false)
   })
 
-  it('malformed public key (wrong length) returns false', async () => {
+  it('malformed public key (wrong length) returns false gracefully', async () => {
     const { privKey } = await makeKeypair()
-    const { sig, hash } = await signReading(privKey, METER_ID, KWH, TIMESTAMP)
-    const badPubKey = new Uint8Array(16) // too short
-    await expect(ed.verifyAsync(sig, hash, badPubKey)).rejects.toThrow()
+    const { sigHex, hash } = await signReading(privKey, METER_ID, KWH, TIMESTAMP)
+    const badPubKeyHex = Buffer.alloc(16).toString('hex')
+    const result = await verifyReadingSignature(sigHex, hash, badPubKeyHex)
+    expect(result).toBe(false)
   })
 
   it('computeReadingHash is deterministic', () => {

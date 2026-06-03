@@ -3,11 +3,14 @@
 import { useCallback, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
-import { Award, Leaf, Search, X } from 'lucide-react'
+import { Award, Leaf, Search, X, FileDown } from 'lucide-react'
 import { RetireModal } from '@/components/retire-modal'
+import { TransferModal } from '@/components/transfer-modal'
 import { useToast } from '@/components/toast'
 import { useWallet } from '@/hooks/useWallet'
 import { WalletGate } from '@/components/wallet-gate'
+
+const MAX_BULK = 100
 
 interface Certificate {
   id: string
@@ -40,6 +43,8 @@ export default function CertificatesPage() {
   const { toast, dismiss } = useToast()
   const { address, connected } = useWallet()
   const [retiring, setRetiring] = useState<Certificate | null>(null)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [bulkRetiring, setBulkRetiring] = useState(false)
 
   // Read filter state from URL
   const q = searchParams.get('q') ?? ''
@@ -89,6 +94,30 @@ export default function CertificatesPage() {
     [draft, searchParams]
   )
 
+  async function handleTransfer(toAddress: string) {
+    if (!transferring) return
+    const pendingId = toast('pending', 'Submitting transfer transaction…')
+    try {
+      const res = await fetch(`/api/certificates/${transferring.id}/transfer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from_address: address, to_address: toAddress }),
+      })
+      dismiss(pendingId)
+      if (!res.ok) {
+        const { error: msg } = await res.json().catch(() => ({ error: 'Unknown error' }))
+        toast('error', msg ?? 'Transfer failed')
+        return
+      }
+      toast('success', 'Certificate transferred successfully')
+      setTransferring(null)
+      qc.invalidateQueries({ queryKey: ['certificates'] })
+    } catch (err) {
+      dismiss(pendingId)
+      toast('error', err instanceof Error ? err.message : 'Transfer failed')
+    }
+  }
+
   async function handleRetire(reason: string) {
     if (!retiring) return
     const pendingId = toast('pending', 'Submitting retirement transaction…')
@@ -110,6 +139,53 @@ export default function CertificatesPage() {
     } catch (err) {
       dismiss(pendingId)
       toast('error', err instanceof Error ? err.message : 'Retirement failed')
+    }
+  }
+
+  const activeData = data.filter((c) => !c.retired)
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    const activeIds = activeData.map((c) => c.id)
+    const allSelected = activeIds.every((id) => selected.has(id))
+    setSelected(allSelected ? new Set() : new Set(activeIds.slice(0, MAX_BULK)))
+  }
+
+  async function handleBulkRetire() {
+    if (!selected.size || !address) return
+    setBulkRetiring(true)
+    const pendingId = toast('pending', `Retiring ${selected.size} certificate(s)…`)
+    try {
+      const res = await fetch('/api/certificates/retire/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ certificate_ids: [...selected], wallet_address: address }),
+      })
+      dismiss(pendingId)
+      const json = await res.json().catch(() => ({}))
+      const { summary } = json
+      if (summary) {
+        toast(
+          summary.failed === 0 ? 'success' : 'error',
+          `${summary.succeeded} retired, ${summary.failed} failed`
+        )
+      } else {
+        toast('error', 'Bulk retirement failed')
+      }
+      setSelected(new Set())
+      qc.invalidateQueries({ queryKey: ['certificates'] })
+    } catch (err) {
+      dismiss(pendingId)
+      toast('error', err instanceof Error ? err.message : 'Bulk retirement failed')
+    } finally {
+      setBulkRetiring(false)
     }
   }
 
@@ -205,6 +281,29 @@ export default function CertificatesPage() {
           )}
         </div>
 
+        {/* Bulk retire bar */}
+        {selected.size > 0 && (
+          <div className="mb-3 flex items-center gap-3 rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-2 dark:border-yellow-700 dark:bg-yellow-900/20">
+            <span className="text-sm text-yellow-800 dark:text-yellow-300">
+              {selected.size} certificate{selected.size !== 1 ? 's' : ''} selected
+            </span>
+            <button
+              onClick={handleBulkRetire}
+              disabled={bulkRetiring || !connected}
+              className="ml-auto rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {bulkRetiring ? 'Retiring…' : 'Retire selected'}
+            </button>
+            <button
+              onClick={() => setSelected(new Set())}
+              className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400"
+              aria-label="Clear selection"
+            >
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </div>
+        )}
+
         {error && (
           <p role="alert" className="mb-4 text-sm text-red-600 dark:text-red-400">
             Failed to load certificates.
@@ -220,6 +319,15 @@ export default function CertificatesPage() {
             >
               <thead>
                 <tr className="bg-gray-50 dark:bg-gray-800/50">
+                  <th scope="col" className="px-4 py-3">
+                    <input
+                      type="checkbox"
+                      aria-label="Select all active certificates"
+                      checked={activeData.length > 0 && activeData.every((c) => selected.has(c.id))}
+                      onChange={toggleSelectAll}
+                      className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                    />
+                  </th>
                   {['Certificate ID', 'Meter ID', 'kWh', 'Issued', 'Status', 'Action'].map((h) => (
                     <th
                       key={h}
@@ -234,20 +342,31 @@ export default function CertificatesPage() {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-400">
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-400">
                       Loading…
                     </td>
                   </tr>
                 ) : data.length > 0 ? (
                   data.map((cert) => (
                     <tr key={cert.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/40">
+                      <td className="px-4 py-3">
+                        {!cert.retired && (
+                          <input
+                            type="checkbox"
+                            aria-label={`Select certificate ${cert.id.slice(0, 8)}`}
+                            checked={selected.has(cert.id)}
+                            onChange={() => toggleSelect(cert.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                          />
+                        )}
+                      </td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-700 dark:text-gray-300">
                         {cert.id.slice(0, 8)}…
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-gray-500 dark:text-gray-400">
                         {cert.meter_id ? `${cert.meter_id.slice(0, 8)}…` : '—'}
                       </td>
-                      <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{cert.kwh}</td>
+                      <td className="px-4 py-3 text-gray-900 dark:text-gray-100">{cert.kwh.toFixed(3)}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
                         {new Date(cert.issued_at).toLocaleDateString()}
                       </td>
@@ -266,21 +385,40 @@ export default function CertificatesPage() {
                       </td>
                       <td className="px-4 py-3">
                         {!cert.retired && (
-                          <button
-                            onClick={() => setRetiring(cert)}
-                            disabled={!connected}
-                            aria-label={`Retire certificate ${cert.id.slice(0, 8)}`}
-                            className="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            Retire
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setTransferring(cert)}
+                              disabled={!connected}
+                              aria-label={`Transfer certificate ${cert.id.slice(0, 8)}`}
+                              className="rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Transfer
+                            </button>
+                            <button
+                              onClick={() => setRetiring(cert)}
+                              disabled={!connected}
+                              aria-label={`Retire certificate ${cert.id.slice(0, 8)}`}
+                              className="rounded-md bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                              Retire
+                            </button>
+                            <a
+                              href={`/api/certificates/${cert.id}/irec-export${address ? `?holder=${encodeURIComponent(address)}` : ''}`}
+                              download={`irec-${cert.id}.xml`}
+                              aria-label={`Export certificate ${cert.id.slice(0, 8)} as I-REC XML`}
+                              className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+                            >
+                              <FileDown className="h-3 w-3" aria-hidden="true" />
+                              I-REC
+                            </a>
+                          </div>
                         )}
                       </td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
                       No certificates found.
                     </td>
                   </tr>
@@ -296,6 +434,15 @@ export default function CertificatesPage() {
             kwh={retiring.kwh}
             onConfirm={handleRetire}
             onClose={() => setRetiring(null)}
+          />
+        )}
+
+        {transferring && (
+          <TransferModal
+            certificateId={transferring.id}
+            kwh={transferring.kwh}
+            onConfirm={handleTransfer}
+            onClose={() => setTransferring(null)}
           />
         )}
       </div>

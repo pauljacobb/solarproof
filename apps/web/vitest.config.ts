@@ -10,6 +10,7 @@ export default defineConfig({
     setupFiles: ['./src/test-setup.ts'],
     environmentMatchGlobs: [
       ['src/__tests__/components/**', 'jsdom'],
+      ['src/__tests__/wallet.test.ts', 'jsdom'],
     ],
     coverage: {
       provider: 'v8',

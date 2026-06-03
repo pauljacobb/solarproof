@@ -196,7 +196,21 @@ The `nonce` field is optional but strongly recommended for replay protection. Us
 
 ---
 
-## Key Generation Procedure
+## Hardware Security Modules (HSM)
+
+For production deployments (Level 2+), it is **mandatory** to store the meter's private key in a Hardware Security Module (HSM), Trusted Platform Module (TPM), or Secure Enclave.
+
+### Key Requirements
+
+1. **Non-extractable**: The private key must be generated on-chip and marked as non-extractable.
+2. **PKCS#11**: The device should ideally support the PKCS#11 interface for signing.
+3. **Ed25519 Support**: The HSM must support the `CKM_EDDSA` mechanism (PKCS#11 v3.0+).
+
+### YubiKey Integration
+
+YubiKey 5 Series devices support Ed25519 via the PIV application. For detailed implementation details, see the [Hardware HSM Integration Guide](HSM_INTEGRATION.md).
+
+---
 
 ### Development / simulation
 

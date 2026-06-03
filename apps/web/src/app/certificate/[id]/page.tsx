@@ -76,7 +76,7 @@ export default async function CertificatePage({
       hash: reading?.reading_hash ?? null,
       hashLabel: 'Reading hash',
       status: reading ? 'done' : 'pending',
-      detail: reading ? `${reading.kwh} kWh · Meter ${reading.meter_id}` : undefined,
+      detail: reading ? `${Number(reading.kwh).toFixed(3)} kWh · Meter ${reading.meter_id}` : undefined,
     },
     {
       icon: ShieldCheck,
@@ -104,7 +104,7 @@ export default async function CertificatePage({
       hashLabel: 'Mint tx',
       explorerUrl: `https://stellar.expert/explorer/testnet/tx/${cert.mint_tx_hash}`,
       status: 'done',
-      detail: `${cert.kwh} kWh`,
+      detail: `${Number(cert.kwh).toFixed(3)} kWh`,
     },
     {
       icon: FlameKindling,
@@ -150,7 +150,7 @@ export default async function CertificatePage({
           ) : (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700 dark:bg-green-900/30 dark:text-green-400">
               <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-              Active · {cert.kwh} kWh
+              Active · {Number(cert.kwh).toFixed(3)} kWh
             </span>
           )}
         </div>

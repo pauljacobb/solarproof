@@ -11,7 +11,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://127.0.0.1:3000',
+    baseURL: process.env.BASE_URL ?? 'http://127.0.0.1:3000',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -23,10 +23,15 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'pnpm exec next dev --hostname 127.0.0.1 --port 3000',
-    port: 3000,
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-  },
+  // Skip starting a local server when BASE_URL points to a remote staging env
+  ...(process.env.BASE_URL && !process.env.BASE_URL.includes('127.0.0.1')
+    ? {}
+    : {
+        webServer: {
+          command: 'pnpm exec next dev --hostname 127.0.0.1 --port 3000',
+          port: 3000,
+          reuseExistingServer: !process.env.CI,
+          timeout: 120000,
+        },
+      }),
 })

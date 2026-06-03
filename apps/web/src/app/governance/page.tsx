@@ -211,8 +211,8 @@ function ProposalCard({
 
 // ── Create Proposal Form ───────────────────────────────────────────────────────
 
-interface FormState { title: string; description: string; days: string }
-const EMPTY: FormState = { title: '', description: '', days: '7' }
+interface FormState { title: string; description: string; days: string; action: string }
+const EMPTY: FormState = { title: '', description: '', days: '7', action: '' }
 
 function CreateProposalForm({ onCreated }: { onCreated: (p: Proposal) => void }) {
   const { connected, connect } = useWallet()
@@ -227,6 +227,7 @@ function CreateProposalForm({ onCreated }: { onCreated: (p: Proposal) => void })
     if (!form.description.trim()) e.description = 'Description is required.'
     const d = Number(form.days)
     if (!form.days || isNaN(d) || d < 1 || d > 30) e.days = 'Enter a number between 1 and 30.'
+    if (!form.action.trim()) e.action = 'Proposed action is required.'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -302,7 +303,22 @@ function CreateProposalForm({ onCreated }: { onCreated: (p: Proposal) => void })
           />
         </Field>
 
-        <Field id="prop-days" label="Voting period (days)" error={errors.days}>
+        <Field id="prop-action" label="Proposed action" error={errors.action}>
+          <input
+            id="prop-action"
+            type="text"
+            value={form.action}
+            onChange={(e) => setForm((f) => ({ ...f, action: e.target.value }))}
+            maxLength={200}
+            aria-required="true"
+            aria-describedby={errors.action ? 'prop-action-err' : undefined}
+            aria-invalid={!!errors.action}
+            placeholder="e.g. update_param, call_contract, transfer_funds"
+            className="input-base"
+          />
+        </Field>
+
+        <Field id="prop-days" label="Voting deadline (days)" error={errors.days}>
           <input
             id="prop-days"
             type="number"

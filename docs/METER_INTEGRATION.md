@@ -174,4 +174,4 @@ node scripts/send-reading.mjs \
 - Store the private key in a hardware security module (HSM) or TPM in production. Never log or transmit it.
 - Use a monotonically increasing timestamp to prevent replay attacks. The server rejects duplicate reading hashes.
 - Rotate keys by registering a new public key and deactivating the old meter record.
-- For hardware HSM integration (YubiKey / TPM), see the Level 2 roadmap item in the README.
+- For hardware HSM integration (YubiKey / TPM), see the [Hardware HSM Integration Guide](HSM_INTEGRATION.md).

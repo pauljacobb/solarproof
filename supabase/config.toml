@@ -23,5 +23,10 @@ file_size_limit = "50MiB"
 
 [auth]
 site_url = "http://localhost:3000"
-jwt_expiry = 3600
+# Access token expires after 15 minutes (900 s)
+jwt_expiry = 900
+# Refresh token rotation — old token is invalidated on every refresh
+refresh_token_rotation_enabled = true
+# Reuse interval (seconds): tolerate clock skew / network retries
+security_refresh_token_reuse_interval = 10
 enable_signup = true

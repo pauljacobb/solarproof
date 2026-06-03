@@ -54,14 +54,14 @@ jobs:
       - run: pnpm build
         working-directory: apps/web
         env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder' }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_STELLAR_NETWORK: testnet
           NEXT_PUBLIC_ENERGY_TOKEN_ID: placeholder
           NEXT_PUBLIC_AUDIT_REGISTRY_ID: placeholder
           NEXT_PUBLIC_COMMUNITY_GOVERNANCE_ID: placeholder
-          SUPABASE_SERVICE_ROLE_KEY: placeholder
-          MINTER_SECRET_KEY: SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          MINTER_SECRET_KEY: ${{ secrets.MINTER_SECRET_KEY }}
           TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
           TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
@@ -103,6 +103,21 @@ jobs:
           node-version: 22
       - name: Validate openapi.yaml
         run: npx --yes @redocly/cli@1 lint openapi.yaml --format=github-actions
+
+  license-compliance:
+    name: License compliance check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: npx license-checker --onlyAllow "$(node -e "const c=require('./.license-checker.json');console.log(c.allowedLicenses.join(';'))")" --excludePrivatePackages
 
   contracts:
     name: Contracts (fmt + clippy + test)
@@ -177,3 +192,44 @@ jobs:
       - name: fuzz_vote (30 s)
         run: cargo fuzz run fuzz_vote -- -max_total_time=30 corpus/fuzz_vote
         working-directory: apps/contracts/fuzz
+
+  image-scan:
+    name: Docker image vulnerability scan (Trivy)
+    runs-on: ubuntu-latest
+    needs: web
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            --file apps/web/Dockerfile \
+            --tag solarproof/web:${{ github.sha }} \
+            .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: solarproof/web:${{ github.sha }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Upload Trivy SARIF results as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-scan-results
+          path: trivy-results.sarif
+          retention-days: 30
+
+      - name: Upload SARIF to GitHub Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-results.sarif

@@ -46,7 +46,7 @@ export async function enqueue(type: JobType, payload: Record<string, unknown>): 
  * Process a single job by ID, retrying up to `MAX_ATTEMPTS` times on failure.
  *
  * Retries use exponential back-off (2 s, 4 s, 8 s). After all attempts are
- * exhausted the job is marked `'failed'` and no further retries occur.
+ * exhausted the job is marked `'failed'` and moved to the dead-letter queue.
  *
  * @param jobId - UUID of the job record to process.
  */
@@ -100,6 +100,7 @@ async function runAnchorAndMint(
   const { anchorReading, mintCertificates } = await import('@/lib/stellar')
   const { createServiceClient: svc } = await import('@/lib/supabase')
   const { invalidateCert } = await import('@/lib/cache')
+  const { fireWebhook } = await import('@/lib/webhooks')
 
   const { readingId, readingHashHex, recipientAddress, kwh, correlationId } = payload as {
     readingId: string
@@ -118,7 +119,7 @@ async function runAnchorAndMint(
   const mintTxHash = await mintCertificates(recipientAddress, kwh, correlationId)
   await db.from('readings').update({ minted: true, mint_tx_hash: mintTxHash }).eq('id', readingId)
 
-  // Fetch cooperative_id for certificate insert
+  // Fetch cooperative_id for certificate insert and webhooks
   const { data: reading } = await db
     .from('readings')
     .select('meter_id, meters(cooperative_id)')
@@ -138,6 +139,8 @@ async function runAnchorAndMint(
       retired: false,
     })
     await invalidateCert(readingId, readingHashHex, mintTxHash)
+    await fireWebhook(cooperativeId, 'anchor', { reading_id: readingId, anchor_tx_hash: anchorTxHash })
+    await fireWebhook(cooperativeId, 'mint', { reading_id: readingId, mint_tx_hash: mintTxHash, kwh })
   }
 
   return { anchor_tx_hash: anchorTxHash, mint_tx_hash: mintTxHash }

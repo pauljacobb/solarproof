@@ -54,7 +54,7 @@ export function RetireModal({ certificateId, kwh, onConfirm, onClose }: Props) {
         <p className="mb-4 text-sm text-gray-600 dark:text-gray-400">
           You are about to permanently retire certificate{' '}
           <CopyableText value={certificateId} displayValue={`${certificateId.slice(0, 8)}…`} />
-          {' '}({kwh} kWh).
+          {' '}({kwh.toFixed(3)} kWh).
           This action cannot be undone.
         </p>
 

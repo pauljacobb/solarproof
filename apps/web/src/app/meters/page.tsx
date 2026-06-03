@@ -8,11 +8,14 @@ import { CopyableText } from '@/components/copy-button'
 
 interface Meter {
   id: string
+  name: string
   serial_number: string
   pubkey_hex: string
   active: boolean
   created_at: string
   cooperative_id: string
+  meter_group: string | null
+  tags: string[]
 }
 
 async function fetchMeters(): Promise<Meter[]> {
@@ -22,9 +25,12 @@ async function fetchMeters(): Promise<Meter[]> {
 }
 
 async function registerMeter(body: {
+  name: string
   cooperative_id: string
   serial_number: string
   pubkey_hex: string
+  meter_group?: string
+  tags?: string[]
 }): Promise<Meter> {
   const res = await fetch('/api/meters', {
     method: 'POST',
@@ -47,13 +53,37 @@ async function revokeMeter(id: string): Promise<void> {
 // Register form
 // ---------------------------------------------------------------------------
 function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
-  const [form, setForm] = useState({ cooperative_id: '', serial_number: '', pubkey_hex: '' })
+  const [form, setForm] = useState({
+    name: '',
+    cooperative_id: '',
+    serial_number: '',
+    pubkey_hex: '',
+    meter_group: '',
+    tags: '',
+  })
   const [error, setError] = useState('')
 
   const mutation = useMutation({
-    mutationFn: registerMeter,
+    mutationFn: (data: typeof form) =>
+      registerMeter({
+        ...data,
+        tags: data.tags
+          ? data.tags
+              .split(',')
+              .map((t) => t.trim())
+              .filter(Boolean)
+          : [],
+        meter_group: data.meter_group || undefined,
+      }),
     onSuccess: () => {
-      setForm({ cooperative_id: '', serial_number: '', pubkey_hex: '' })
+      setForm({
+        name: '',
+        cooperative_id: '',
+        serial_number: '',
+        pubkey_hex: '',
+        meter_group: '',
+        tags: '',
+      })
       setError('')
       onSuccess()
     },
@@ -76,7 +106,25 @@ function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
         Register new meter
       </h2>
 
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div>
+          <label
+            htmlFor="name"
+            className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+          >
+            Meter name
+          </label>
+          <input
+            id="name"
+            type="text"
+            required
+            value={form.name}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            placeholder="Solar Array A - Meter 1"
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          />
+        </div>
+
         <div>
           <label
             htmlFor="cooperative_id"
@@ -129,6 +177,40 @@ function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
             onChange={(e) => setForm((f) => ({ ...f, pubkey_hex: e.target.value }))}
             placeholder="0a1b2c…"
             className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-mono text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="meter_group"
+            className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+          >
+            Group (optional)
+          </label>
+          <input
+            id="meter_group"
+            type="text"
+            value={form.meter_group}
+            onChange={(e) => setForm((f) => ({ ...f, meter_group: e.target.value }))}
+            placeholder="North Farm"
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+          />
+        </div>
+
+        <div>
+          <label
+            htmlFor="tags"
+            className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+          >
+            Labels (comma separated)
+          </label>
+          <input
+            id="tags"
+            type="text"
+            value={form.tags}
+            onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))}
+            placeholder="residential, phase-1"
+            className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-yellow-400 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
           />
         </div>
       </div>
@@ -295,7 +377,7 @@ export default function MetersPage() {
           >
             <thead>
               <tr className="bg-gray-50 dark:bg-gray-800/50">
-                {['Serial number', 'Public key', 'Status', 'Registered', 'Actions'].map((h) => (
+                {['Name', 'Serial number', 'Group', 'Labels', 'Status', 'Actions'].map((h) => (
                   <th
                     key={h}
                     scope="col"
@@ -309,7 +391,7 @@ export default function MetersPage() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
                     Loading…
                   </td>
                 </tr>
@@ -320,10 +402,29 @@ export default function MetersPage() {
                     className="transition-colors hover:bg-gray-50 dark:hover:bg-gray-800/40"
                   >
                     <td className="px-4 py-3 font-medium text-gray-900 dark:text-gray-100">
+                      {m.name}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
                       {m.serial_number}
                     </td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                      <CopyableText value={m.pubkey_hex} displayValue={`${m.pubkey_hex.slice(0, 16)}…`} />
+                      {m.meter_group || <span className="text-gray-400 italic">None</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {m.tags.length > 0 ? (
+                          m.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className="inline-flex items-center rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-400"
+                            >
+                              {tag}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -335,9 +436,6 @@ export default function MetersPage() {
                       >
                         {m.active ? 'Active' : 'Revoked'}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
-                      {new Date(m.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3">
                       {m.active && (
@@ -356,7 +454,7 @@ export default function MetersPage() {
               ) : (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     className="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400"
                   >
                     No meters registered yet.

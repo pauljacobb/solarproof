@@ -237,6 +237,39 @@ export async function assertMintable(recipientAddress: string): Promise<void> {
 }
 
 /**
+ * Transfer energy certificates from one account to another via SEP-41 transfer.
+ *
+ * @param fromAddress - Stellar G-address of the current certificate holder.
+ * @param toAddress - Stellar G-address of the recipient.
+ * @param kwh - Amount to transfer in kilowatt-hours.
+ * @param correlationId - Optional trace ID for logs and error messages.
+ * @returns Stellar transaction hash of the transfer transaction.
+ */
+export async function transferCertificate(
+  fromAddress: string,
+  toAddress: string,
+  kwh: number,
+  correlationId = crypto.randomUUID()
+): Promise<string> {
+  const minter = Keypair.fromSecret(env.MINTER_SECRET_KEY)
+  const server = getServer()
+  const account = await rpcCall(() => server.getAccount(minter.publicKey()), correlationId)
+  const contract = new Contract(env.NEXT_PUBLIC_ENERGY_TOKEN_ID)
+
+  const tx = new TransactionBuilder(account, { fee: BASE_FEE, networkPassphrase: NETWORK_PASSPHRASE })
+    .addOperation(contract.call(
+      'transfer',
+      addressToScVal(fromAddress),
+      addressToScVal(toAddress),
+      amountToScVal(kwhToStroops(kwh))
+    ))
+    .setTimeout(30)
+    .build()
+
+  return submitTx(tx, minter, correlationId)
+}
+
+/**
  * Mint energy certificates after a successful anchor.
  *
  * Calls `energy_token.mint(recipient, amount_in_stroops)`. The recipient

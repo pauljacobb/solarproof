@@ -2,7 +2,14 @@ import { createHmac } from 'crypto'
 import { createServiceClient } from '@/lib/supabase'
 import type { Json } from '@/lib/database.types'
 
-export type WebhookEvent = 'anchor' | 'mint' | 'retire' | 'mint_failed'
+export type WebhookEvent =
+  | 'anchor'
+  | 'mint'
+  | 'retire'
+  | 'mint_failed'
+  | 'certificate.minted'
+  | 'certificate.transferred'
+  | 'certificate.retired'
 
 export interface WebhookPayload {
   event: WebhookEvent
@@ -15,10 +22,11 @@ function sign(secret: string, body: string): string {
   return createHmac('sha256', secret).update(body).digest('hex')
 }
 
-async function deliver(url: string, secret: string, payload: WebhookPayload): Promise<number> {
+const MAX_ATTEMPTS = 5
+
+async function deliver(url: string, secret: string, payload: WebhookPayload): Promise<{ status: number; attempts: number }> {
   const body = JSON.stringify(payload)
   const sig = sign(secret, body)
-  const MAX_ATTEMPTS = 3
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
@@ -28,13 +36,15 @@ async function deliver(url: string, secret: string, payload: WebhookPayload): Pr
         body,
         signal: AbortSignal.timeout(10_000),
       })
-      if (res.ok) return res.status
-      if (attempt === MAX_ATTEMPTS) return res.status
+      if (res.ok) return { status: res.status, attempts: attempt }
+      if (attempt === MAX_ATTEMPTS) return { status: res.status, attempts: attempt }
     } catch {
       if (attempt === MAX_ATTEMPTS) throw new Error(`Webhook delivery failed after ${MAX_ATTEMPTS} attempts`)
     }
+    // Exponential backoff: 1s, 2s, 4s, 8s between retries
+    await new Promise((r) => setTimeout(r, 2 ** (attempt - 1) * 1000))
   }
-  return 0
+  return { status: 0, attempts: MAX_ATTEMPTS }
 }
 
 /**
@@ -65,11 +75,12 @@ export async function fireWebhook(
       let responseStatus: number | null = null
       let attempts = 0
       try {
-        attempts = 3
-        responseStatus = await deliver(ep.url, ep.secret, payload)
+        const result = await deliver(ep.url, ep.secret, payload)
+        responseStatus = result.status
+        attempts = result.attempts
         status = responseStatus >= 200 && responseStatus < 300 ? 'delivered' : 'failed'
       } catch {
-        attempts = 3
+        attempts = MAX_ATTEMPTS
       }
       await db.from('webhook_logs').insert({
         endpoint_id: ep.id,

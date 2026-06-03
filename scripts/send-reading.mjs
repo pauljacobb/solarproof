@@ -47,6 +47,7 @@ const body = {
   kwh,
   timestamp,
   signature_hex: signature.toString('hex'),
+  nonce: `sim-${meterId}-${timestamp}-${Math.floor(Math.random() * 1000000)}`,
 }
 
 console.log('Sending reading:', { meterId, kwh, timestamp })

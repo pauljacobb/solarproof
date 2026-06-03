@@ -4,18 +4,19 @@ export interface Database {
   public: {
     Tables: {
       cooperatives: {
-        Row: { id: string; name: string; admin_address: string; created_at: string }
-        Insert: { name: string; admin_address: string }
-        Update: Partial<{ name: string; admin_address: string }>
+        Row: { id: string; name: string; admin_address: string; created_at: string; suspended: boolean }
+        Insert: { name: string; admin_address: string; suspended?: boolean }
+        Update: Partial<{ name: string; admin_address: string; suspended: boolean }>
         Relationships: []
       }
       meters: {
         Row: {
           id: string; cooperative_id: string; serial_number: string
           name: string; pubkey_hex: string; active: boolean; created_at: string
+          api_key: string
         }
-        Insert: { cooperative_id: string; serial_number: string; name: string; pubkey_hex: string; active: boolean }
-        Update: Partial<{ cooperative_id: string; serial_number: string; name: string; pubkey_hex: string; active: boolean }>
+        Insert: { cooperative_id: string; serial_number: string; name: string; pubkey_hex: string; active: boolean; api_key?: string }
+        Update: Partial<{ cooperative_id: string; serial_number: string; name: string; pubkey_hex: string; active: boolean; api_key: string }>
         Relationships: []
       }
       readings: {
@@ -55,6 +56,7 @@ export interface Database {
           reading_hash: string; mint_tx_hash: string; anchor_tx_hash: string
           kwh: number; issued_at: string; retired: boolean
           retired_at: string | null; retired_by: string | null
+          retire_tx_hash: string | null
         }
         Insert: {
           cooperative_id: string; reading_id: string
@@ -85,6 +87,29 @@ export interface Database {
         }
         Insert: Omit<Database['public']['Tables']['webhook_logs']['Row'], 'id' | 'created_at'>
         Update: Partial<Database['public']['Tables']['webhook_logs']['Insert']>
+      }
+    }
+      audit_logs: {
+        Row: {
+          id: string
+          timestamp: string
+          actor: string
+          action: string
+          resource: string
+          resource_id: string | null
+          ip: string | null
+          metadata: Json | null
+        }
+        Insert: Omit<Database['public']['Tables']['audit_logs']['Row'], 'id' | 'timestamp'>
+        Update: never
+      }
+      retirement_events: {
+        Row: {
+          id: string; certificate_id: string; beneficiary: string
+          retire_tx_hash: string; kwh: number; retired_at: string
+        }
+        Insert: Omit<Database['public']['Tables']['retirement_events']['Row'], 'id' | 'retired_at'>
+        Update: Partial<Database['public']['Tables']['retirement_events']['Insert']>
       }
     }
     Views: Record<string, never>

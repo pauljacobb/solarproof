@@ -5,6 +5,7 @@
     "certificates": "Certificates",
     "governance": "Governance",
     "verify": "Verify",
+    "admin": "Admin",
     "connectWallet": "Connect wallet",
     "disconnectWallet": "Disconnect wallet",
     "openMenu": "Open navigation menu",

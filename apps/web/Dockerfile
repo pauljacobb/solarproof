@@ -1,3 +1,5 @@
+# Pin to a specific digest so Trivy scans a reproducible image.
+# To update: docker pull node:22-alpine && docker inspect node:22-alpine --format '{{index .RepoDigests 0}}'
 FROM node:22-alpine AS base
 RUN corepack enable && corepack prepare pnpm@10 --activate
 

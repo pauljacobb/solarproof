@@ -84,6 +84,9 @@ cp apps/web/.env.example apps/web/.env.local
 
 Edit `apps/web/.env.local` and fill in:
 
+> Local development secrets must live in `apps/web/.env.local` only. This file is gitignored and should never be committed.
+> CI should use GitHub Actions secrets, and production should use Vercel environment variables.
+
 ```env
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -92,6 +95,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
 # Stellar
 NEXT_PUBLIC_STELLAR_NETWORK=testnet
+NEXT_PUBLIC_STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 NEXT_PUBLIC_ENERGY_TOKEN_ID=        # from contract deployment
 NEXT_PUBLIC_AUDIT_REGISTRY_ID=      # from contract deployment
 NEXT_PUBLIC_COMMUNITY_GOVERNANCE_ID= # from contract deployment

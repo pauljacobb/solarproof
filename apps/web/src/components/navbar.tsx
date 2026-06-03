@@ -23,6 +23,7 @@ const links = [
   { href: '/certificates', labelKey: 'certificates' },
   { href: '/governance', labelKey: 'governance' },
   { href: '/verify', labelKey: 'verify' },
+  { href: '/admin', labelKey: 'admin' },
 ]
 
 const network = env.NEXT_PUBLIC_STELLAR_NETWORK

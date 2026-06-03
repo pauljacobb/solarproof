@@ -157,6 +157,9 @@ impl AuditRegistry {
     }
 
     /// Returns the current authorised API signer address.
+    ///
+    /// # Panics
+    /// * `"not initialized"` if the contract has not been initialised.
     pub fn api_signer(env: Env) -> soroban_sdk::Address {
         env.storage()
             .instance()
@@ -171,10 +174,29 @@ impl AuditRegistry {
         ((b0 << 8) | b1) % 1024
     }
 
-    /// Anchor a reading hash on-chain.
+    /// Anchor a reading hash on-chain. Only the registered `api_signer` may call this.
+    ///
+    /// # Arguments
+    /// * `caller`       — must equal the registered `api_signer`.
+    /// * `reading_hash` — 32-byte SHA-256 of `(meter_id || kwh_stroops_le || timestamp_le)`.
+    /// * `nonce`        — 32-byte unique value; prevents replay of the same anchor call.
+    ///
+    /// # Authorization
+    /// Requires `caller` authorisation. Returns `Err(Error::Unauthorized)` if
+    /// `caller` is not the registered `api_signer`.
+    ///
+    /// # Errors
+    /// * `Error::Unauthorized`    — caller is not the `api_signer`.
+    /// * `Error::AlreadyAnchored` — `reading_hash` or `nonce` was already used.
     ///
     /// # Events
-    /// Emits `(topic: "anchor", data: reading_hash)`.
+    /// Emits `(topic: "anchor", data: (reading_hash, ledger_sequence, ledger_timestamp))`.
+    ///
+    /// # Example
+    /// ```ignore
+    /// client.anchor(&api_signer, &reading_hash, &nonce).unwrap();
+    /// assert!(client.is_anchored(&reading_hash));
+    /// ```
     pub fn anchor(
         env: Env,
         caller: soroban_sdk::Address,
@@ -235,6 +257,13 @@ impl AuditRegistry {
     }
 
     /// Returns the `AuditAnchor` for `reading_hash`, or `None` if not anchored.
+    ///
+    /// # Example
+    /// ```ignore
+    /// if let Some(anchor) = client.verify(&hash) {
+    ///     println!("anchored at ledger {}", anchor.anchored_at_ledger);
+    /// }
+    /// ```
     pub fn verify(env: Env, reading_hash: BytesN<32>) -> Option<AuditAnchor> {
         let bucket_id = Self::get_bucket_id(&reading_hash);
         let bucket: Map<BytesN<32>, u32> = env.storage().persistent().get(&DataKey::Bucket(bucket_id))?;
@@ -264,6 +293,9 @@ impl AuditRegistry {
     }
 
     /// Returns the admin address.
+    ///
+    /// # Panics
+    /// * `"not initialized"` if the contract has not been initialised.
     pub fn admin(env: Env) -> soroban_sdk::Address {
         env.storage()
             .instance()

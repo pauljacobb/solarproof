@@ -1,0 +1,25 @@
+# cargo-mutants configuration
+# https://mutants.rs/configuration.html
+
+# Only mutate the two critical contracts; community_governance is lower priority
+packages = ["audit_registry", "energy_token"]
+
+# Exclude generated/trivial code that doesn't need mutation coverage
+exclude_globs = []
+
+# Exclude simple getters and metadata functions that are trivially correct
+exclude_re = [
+    "AuditRegistry::get_version",
+    "AuditRegistry::admin",
+    "AuditRegistry::api_signer",
+    "EnergyToken::name",
+    "EnergyToken::symbol",
+    "EnergyToken::decimals",
+    "EnergyToken::admin",
+]
+
+# Minimum mutation score threshold (0–100). CI fails below this.
+minimum_test_coverage = 70
+
+# Run tests in release mode for speed (Soroban SDK requires it for some features)
+test_workspace = true

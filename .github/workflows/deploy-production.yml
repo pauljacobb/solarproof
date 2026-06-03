@@ -1,0 +1,49 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    name: CI gate
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  deploy:
+    name: Deploy to Vercel (production)
+    runs-on: ubuntu-latest
+    needs: ci
+    permissions:
+      deployments: write
+    environment:
+      name: production
+      url: ${{ steps.promote.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Build & deploy preview (green)
+        id: deploy
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          url=$(vercel deploy --token "$VERCEL_TOKEN" --yes 2>&1 | tail -1)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Promote to production
+        id: promote
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+        run: |
+          vercel promote "${{ steps.deploy.outputs.url }}" \
+            --token "$VERCEL_TOKEN" --scope "$VERCEL_ORG_ID"
+          echo "url=${{ steps.deploy.outputs.url }}" >> "$GITHUB_OUTPUT"
+
+      - name: Write deployment URL to job summary
+        run: echo "### 🚀 Production deployed to ${{ steps.promote.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"

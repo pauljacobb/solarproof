@@ -120,7 +120,7 @@ exports[`MeterReadingRow snapshots > pending (unverified) reading row renders co
       <td
         class="px-4 py-3 text-gray-900 dark:text-gray-100"
       >
-        12.5
+        12.500
       </td>
       <td
         class="px-4 py-3 text-gray-600 dark:text-gray-400"
@@ -155,7 +155,7 @@ exports[`MeterReadingRow snapshots > verified reading row renders correctly 1`] 
       <td
         class="px-4 py-3 text-gray-900 dark:text-gray-100"
       >
-        12.5
+        12.500
       </td>
       <td
         class="px-4 py-3 text-gray-600 dark:text-gray-400"
